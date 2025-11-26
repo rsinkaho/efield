@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Viewport settings optimized for iPad/Mobile to prevent zooming and scrolling -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Electric Field Simulation</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --panel-bg: #ffffff;
+            --text-color: #2c3e50;
+            --accent-color: #3498db;
+            --pos-color: #e74c3c;
+            --neg-color: #3498db;
+            --force-color: #27ae60;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden; /* Prevent scroll on body */
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            user-select: none; /* Prevent text selection */
+            -webkit-user-select: none;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            width: 300px;
+            min-width: 300px;
+            background-color: var(--panel-bg);
+            padding: 20px;
+            box-shadow: 2px 0 15px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 10;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 5px 0;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 8px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        select, button {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            background: #fff;
+            color: var(--text-color);
+            -webkit-appearance: none; /* Fix iOS styling */
+        }
+
+        /* Instructions Box */
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid var(--accent-color);
+            padding: 10px;
+            font-size: 13px;
+            line-height: 1.4;
+            color: #444;
+        }
+        .info-box h3 {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        .info-box ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .info-box li {
+            margin-bottom: 4px;
+        }
+
+        /* Legend */
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+            margin-bottom: 6px;
+            color: #666;
+        }
+
+        .color-box { width: 12px; height: 12px; border-radius: 50%; }
+        .line-sample { width: 20px; height: 2px; }
+        .arrow-sample { font-weight: bold; color: var(--force-color); }
+
+        #reset-btn {
+            background-color: #7f8c8d;
+            color: white;
+            border: none;
+            margin-top: auto;
+            cursor: pointer;
+            /* Improve touch target size */
+            min-height: 44px; 
+        }
+        #reset-btn:active { background-color: #6c7a7d; }
+
+        /* Canvas */
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+            cursor: crosshair;
+            /* Prevent iOS tap highlight */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Critical for custom touch handling */
+        }
+
+        #toast {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            pointer-events: none;
+            color: #444;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-weight: 600;
+            z-index: 20;
+        }
+        #toast.visible { opacity: 1; }
+
+        /* Credits Watermark */
+        #credits {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            font-size: 14px;
+            font-weight: 700;
+            color: rgba(0, 0, 0, 0.4);
+            pointer-events: none; /* Allows clicking through the text */
+            z-index: 5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column-reverse; }
+            #sidebar { width: 100%; min-width: 100%; height: auto; padding: 15px; flex-direction: column; box-sizing: border-box; }
+            .info-box { display: none; } /* Hide text on mobile to save space */
+            h1 { display: none; }
+            #reset-btn { width: 100%; margin-top: 10px; }
+            /* Adjust credit position on mobile to not be too close to edge */
+            #credits { bottom: 10px; right: 10px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h1>Electric Field</h1>
+
+        <div class="info-box">
+            <h3>How to Interact</h3>
+            <strong>Move Charge:</strong><br>
+            Drag the test charge to see vectors change.<br><br>
+            <strong>Plan Trajectory:</strong>
+            <ul>
+                <li><strong>Desktop:</strong> Click and drag from the test charge.</li>
+                <li><strong>Touchscreen:</strong> Touch and hold (long press) for 0.5s, then drag.</li>
+            </ul>
+            Release to launch.
+        </div>
+
+        <div class="control-group">
+            <label>Center Charge (Q1)</label>
+            <select id="sourceCharge">
+                <option value="1">Positive (+)</option>
+                <option value="-1">Negative (-)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Test Charge (q2)</label>
+            <select id="testCharge">
+                <option value="1">Positive (+)</option>
+                <option value="-1">Negative (-)</option>
+            </select>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <label>Legend</label>
+            <div class="legend-item">
+                <div class="color-box" style="background: var(--pos-color)"></div> Positive
+            </div>
+            <div class="legend-item">
+                <div class="color-box" style="background: var(--neg-color)"></div> Negative
+            </div>
+            <div class="legend-item">
+                <div class="arrow-sample">➜</div> Force
+            </div>
+            <div class="legend-item">
+                <div class="line-sample" style="background: #f39c12; border-bottom: 2px dashed #f39c12;"></div> Trajectory
+            </div>
+        </div>
+
+        <button id="reset-btn">Reset Simulation</button>
+    </div>
+
+    <div id="canvas-container">
+        <div id="toast">Aiming Mode Active</div>
+        <div id="credits">Roy Sin</div>
+        <canvas id="simCanvas"></canvas>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+    const toast = document.getElementById('toast');
+
+    // --- Physics Constants ---
+    const K = 12000; 
+    const SOURCE_Q = 20; 
+    const TEST_Q = 5;
+    const TEST_MASS = 20; 
+    const TIME_STEP = 0.4; 
+    const LAUNCH_MULTIPLIER = 0.08; 
+
+    let state = {
+        w: 0, h: 0,
+        sourceSign: 1,
+        testSign: 1,
+        
+        // Particle State
+        x: 0, y: 0,
+        vx: 0, vy: 0,
+        
+        // Interaction States
+        isAiming: false,    // Pulling back the slingshot
+        isFlying: false,    // Physics integration running
+        
+        // Input Tracking
+        mouseX: 0, mouseY: 0, // Current pointer pos
+        anchorX: 0, anchorY: 0, // Where the aim started
+        
+        // Mobile specific
+        longPressTimer: null,
+        touchStartX: 0,
+        touchStartY: 0
+    };
+
+    function init() {
+        resize();
+        window.addEventListener('resize', resize);
+        reset();
+
+        // Mouse Events
+        canvas.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+
+        // Touch Events (with passive: false to allow preventDefault)
+        canvas.addEventListener('touchstart', onTouchStart, {passive: false});
+        window.addEventListener('touchmove', onTouchMove, {passive: false});
+        window.addEventListener('touchend', onTouchEnd);
+
+        // UI Controls
+        document.getElementById('sourceCharge').addEventListener('change', (e) => {
+            state.sourceSign = parseInt(e.target.value);
+        });
+        document.getElementById('testCharge').addEventListener('change', (e) => {
+            state.testSign = parseInt(e.target.value);
+        });
+        document.getElementById('reset-btn').addEventListener('click', reset);
+
+        requestAnimationFrame(loop);
+    }
+
+    function resize() {
+        const rect = container.getBoundingClientRect();
+        state.w = rect.width;
+        state.h = rect.height;
+        
+        // Handle High DPI displays (Retina)
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = state.w * dpr;
+        canvas.height = state.h * dpr;
+        ctx.scale(dpr, dpr);
+        
+        // Reset width/height logic for calculations to CSS pixels
+        state.w = rect.width;
+        state.h = rect.height;
+    }
+
+    function reset() {
+        state.isFlying = false;
+        state.isAiming = false;
+        state.vx = 0;
+        state.vy = 0;
+        state.x = state.w / 2 + 150;
+        state.y = state.h / 2;
+        state.mouseX = state.x;
+        state.mouseY = state.y;
+        hideToast();
+    }
+
+    function showToast(msg) {
+        toast.innerText = msg;
+        toast.classList.add('visible');
+    }
+    function hideToast() {
+        toast.classList.remove('visible');
+    }
+
+    // --- Physics Engine ---
+    
+    function getAcceleration(x, y) {
+        const cx = state.w / 2;
+        const cy = state.h / 2;
+        const dx = x - cx;
+        const dy = y - cy;
+        const distSq = dx*dx + dy*dy;
+        const dist = Math.sqrt(distSq);
+
+        if (dist < 10) return { ax: 0, ay: 0 };
+
+        const forceMag = (K * SOURCE_Q * TEST_Q) / distSq;
+        const interaction = state.sourceSign * state.testSign; 
+        
+        const ux = dx / dist;
+        const uy = dy / dist;
+
+        const fx = ux * forceMag * interaction;
+        const fy = uy * forceMag * interaction;
+
+        return { ax: fx / TEST_MASS, ay: fy / TEST_MASS };
+    }
+
+    function integrate(p, dt) {
+        const acc = getAcceleration(p.x, p.y);
+        p.vx += acc.ax * dt;
+        p.vy += acc.ay * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        return p;
+    }
+
+    function update() {
+        // 1. Idle Mode: Follow Cursor/Finger (if not aiming and not flying)
+        if (!state.isAiming && !state.isFlying) {
+            state.x = state.mouseX;
+            state.y = state.mouseY;
+            
+            // Clamp to bounds
+            state.x = Math.max(20, Math.min(state.w - 20, state.x));
+            state.y = Math.max(20, Math.min(state.h - 20, state.y));
+        }
+
+        // 2. Flying Mode
+        if (state.isFlying) {
+            integrate(state, TIME_STEP);
+
+            // Stop if out of bounds
+            if (state.x < -100 || state.x > state.w + 100 || state.y < -100 || state.y > state.h + 100) {
+                state.isFlying = false;
+            }
+            
+            // Stop if collision with source
+            const dx = state.x - state.w/2;
+            const dy = state.y - state.h/2;
+            if (dx*dx + dy*dy < 600) { 
+                state.isFlying = false;
+            }
+        }
+    }
+
+    function calculateTrajectory() {
+        let sim = { x: state.anchorX, y: state.anchorY, vx: 0, vy: 0 };
+
+        // Velocity = (Mouse - Anchor)
+        const dx = state.mouseX - state.anchorX;
+        const dy = state.mouseY - state.anchorY;
+        
+        sim.vx = dx * LAUNCH_MULTIPLIER;
+        sim.vy = dy * LAUNCH_MULTIPLIER;
+
+        let points = [];
+        points.push({x: sim.x, y: sim.y});
+
+        for(let i=0; i<600; i++) {
+            integrate(sim, TIME_STEP);
+            if (i % 3 === 0) points.push({x: sim.x, y: sim.y});
+
+            const distSq = (sim.x - state.w/2)**2 + (sim.y - state.h/2)**2;
+            if (distSq < 600) break;
+            if (sim.x < -50 || sim.x > state.w+50 || sim.y < -50 || sim.y > state.h+50) break;
+        }
+        return points;
+    }
+
+    // --- Rendering ---
+
+    function draw() {
+        ctx.clearRect(0, 0, state.w, state.h);
+
+        const cx = state.w / 2;
+        const cy = state.h / 2;
+
+        drawContinuousFieldLines(cx, cy);
+
+        // Source Charge
+        ctx.beginPath();
+        ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+        ctx.fillStyle = state.sourceSign > 0 ? '#e74c3c' : '#3498db';
+        ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.font = "bold 20px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(state.sourceSign > 0 ? "+" : "-", cx, cy);
+
+        // Determine draw position
+        // If Aiming: Charge stays at anchor
+        // If Flying/Idle: Charge is at state.x/y
+        let drawX = state.isAiming ? state.anchorX : state.x;
+        let drawY = state.isAiming ? state.anchorY : state.y;
+
+        // Aiming Visuals (Slingshot line)
+        if (state.isAiming) {
+            // Aim Vector
+            drawArrow(state.anchorX, state.anchorY, state.mouseX, state.mouseY, '#2c3e50', 2);
+
+            // Trajectory Preview
+            const path = calculateTrajectory();
+            if (path.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(path[0].x, path[0].y);
+                for (let p of path) ctx.lineTo(p.x, p.y);
+                ctx.strokeStyle = '#f39c12';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]); 
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Ghost at anchor
+            ctx.beginPath();
+            ctx.arc(state.anchorX, state.anchorY, 10, 0, Math.PI*2);
+            ctx.strokeStyle = state.testSign > 0 ? '#e74c3c' : '#3498db';
+            ctx.globalAlpha = 0.5;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        }
+
+        // Force Vector (Green Arrow)
+        // Always draw force vector (Idle, Aiming, or Flying)
+        drawForceVector(cx, cy, drawX, drawY);
+
+        // Test Charge
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, 10, 0, Math.PI * 2);
+        ctx.fillStyle = state.testSign > 0 ? '#e74c3c' : '#3498db';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    function drawForceVector(cx, cy, tx, ty) {
+        const dx = tx - cx;
+        const dy = ty - cy;
+        const distSq = dx*dx + dy*dy;
+        const dist = Math.sqrt(distSq);
+        
+        if (dist < 25) return; 
+
+        const angle = Math.atan2(dy, dx);
+        
+        // Interaction: 1 = Repel, -1 = Attract
+        const interaction = state.sourceSign * state.testSign;
+        const forceAngle = interaction > 0 ? angle : angle + Math.PI;
+        
+        // --- Inverse Square Law Scaling ---
+        // VISUAL_SCALE adjusts the arrow length to be visible on screen
+        const VISUAL_SCALE = 2500000; 
+        
+        let rawLength = VISUAL_SCALE / distSq;
+        
+        // Clamp length so it doesn't vanish or cover the screen
+        const minLen = 15;
+        const maxLen = 180; 
+        
+        // Apply clamp
+        const arrowLen = Math.min(maxLen, Math.max(minLen, rawLength));
+        
+        const endX = tx + arrowLen * Math.cos(forceAngle);
+        const endY = ty + arrowLen * Math.sin(forceAngle);
+
+        drawArrow(tx, ty, endX, endY, '#27ae60', 3);
+    }
+
+    function drawArrow(fromX, fromY, toX, toY, color, width) {
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const len = Math.sqrt(dx*dx + dy*dy);
+        if(len < 5) return;
+
+        const angle = Math.atan2(dy, dx);
+        const headLen = 10;
+
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    function drawContinuousFieldLines(cx, cy) {
+        const numLines = 16;
+        const maxDim = Math.max(state.w, state.h);
+        const radius = maxDim * 1.5; 
+
+        ctx.strokeStyle = "rgba(0,0,0,0.15)";
+        ctx.lineWidth = 1;
+
+        for (let i = 0; i < numLines; i++) {
+            const angle = (i / numLines) * Math.PI * 2;
+            const startX = cx + 25 * Math.cos(angle); 
+            const startY = cy + 25 * Math.sin(angle);
+            const endX = cx + radius * Math.cos(angle);
+            const endY = cy + radius * Math.sin(angle);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+
+            // 3 arrows per line
+            const arrowDistances = [120, 280, 440];
+            for (let d of arrowDistances) {
+                const ax = cx + d * Math.cos(angle);
+                const ay = cy + d * Math.sin(angle);
+                if (ax < -20 || ax > state.w + 20 || ay < -20 || ay > state.h + 20) continue;
+                drawFieldArrowHead(ax, ay, angle);
+            }
+        }
+    }
+
+    function drawFieldArrowHead(x, y, angle) {
+        const drawAngle = state.sourceSign > 0 ? angle : angle + Math.PI;
+        const size = 8; 
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath();
+        ctx.moveTo(x + size * Math.cos(drawAngle), y + size * Math.sin(drawAngle));
+        ctx.lineTo(x + size * Math.cos(drawAngle + 2.6), y + size * Math.sin(drawAngle + 2.6));
+        ctx.lineTo(x + size * Math.cos(drawAngle - 2.6), y + size * Math.sin(drawAngle - 2.6));
+        ctx.fill();
+    }
+
+    // --- Input Handling ---
+
+    function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    // Desktop: Mouse Down starts aiming immediately
+    function onMouseDown(e) {
+        const pos = getPos(e);
+        startAiming(pos.x, pos.y);
+        e.preventDefault();
+    }
+
+    function onMouseMove(e) {
+        const rect = canvas.getBoundingClientRect();
+        state.mouseX = e.clientX - rect.left;
+        state.mouseY = e.clientY - rect.top;
+    }
+
+    function onMouseUp(e) {
+        if (state.isAiming) {
+            fire();
+        }
+    }
+
+    // Mobile: Touch Start initiates potential Long Press
+    function onTouchStart(e) {
+        const pos = getPos(e);
+        state.mouseX = pos.x;
+        state.mouseY = pos.y;
+        state.touchStartX = pos.x;
+        state.touchStartY = pos.y;
+
+        // Stop flying if user touches screen
+        state.isFlying = false;
+        state.vx = 0; state.vy = 0;
+
+        // Start Long Press Timer (500ms)
+        state.longPressTimer = setTimeout(() => {
+            startAiming(pos.x, pos.y);
+            showToast("Aiming Mode Active");
+        }, 500);
+
+        e.preventDefault();
+    }
+
+    function onTouchMove(e) {
+        const pos = getPos(e);
+        
+        // If waiting for long press, check if user moved finger too much
+        if (state.longPressTimer && !state.isAiming) {
+            const distSq = (pos.x - state.touchStartX)**2 + (pos.y - state.touchStartY)**2;
+            // 100px squared = 10px movement threshold. If moved more, it's a drag, not a hold.
+            if (distSq > 100) {
+                clearTimeout(state.longPressTimer);
+                state.longPressTimer = null;
+            }
+        }
+
+        state.mouseX = pos.x;
+        state.mouseY = pos.y;
+        e.preventDefault();
+    }
+
+    function onTouchEnd(e) {
+        if (state.longPressTimer) {
+            clearTimeout(state.longPressTimer);
+            state.longPressTimer = null;
+        }
+
+        if (state.isAiming) {
+            fire();
+            hideToast();
+        }
+    }
+
+    function startAiming(x, y) {
+        state.isFlying = false;
+        state.vx = 0; 
+        state.vy = 0;
+        
+        state.isAiming = true;
+        state.anchorX = x;
+        state.anchorY = y;
+        // Ensure mouse matches anchor initially
+        state.mouseX = x;
+        state.mouseY = y;
+    }
+
+    function fire() {
+        // Calculate velocity
+        const dx = state.mouseX - state.anchorX;
+        const dy = state.mouseY - state.anchorY;
+        
+        // Deadzone check: if drag is tiny, just cancel
+        if (Math.sqrt(dx*dx + dy*dy) < 10) {
+            state.isAiming = false;
+            return;
+        }
+
+        state.vx = dx * LAUNCH_MULTIPLIER;
+        state.vy = dy * LAUNCH_MULTIPLIER;
+        
+        // Reset position to anchor (the launch point)
+        state.x = state.anchorX;
+        state.y = state.anchorY;
+        
+        state.isAiming = false;
+        state.isFlying = true;
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    init();
+});
+</script>
+</body>
+</html>
